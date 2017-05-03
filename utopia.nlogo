@@ -109,7 +109,7 @@ to setup-subsystems
   set list-of-subsystems []
 
   let $i 1
-  foreach my-matrix [
+  foreach my-matrix [ [row] ->
     let new-subsystem nobody
     create-subsystems 1 [
       set hidden? true
@@ -121,19 +121,19 @@ to setup-subsystems
 
     set list-of-subsystems lput new-subsystem list-of-subsystems
 
-    if length ? != num-contributions [
+    if length row != num-contributions [
       user-message (word "The number of items in " item ($i - 1) citizen-shares-names " must equal\n the number of items in degrees-of-contribution")
       stop
     ]
-    if not (check-sum-1 ?) [
+    if not (check-sum-1 row) [
       user-message (word "The elements in " item ($i - 1) citizen-shares-names " do not add up to 1")
       stop
     ]
     let $j 0
-    foreach ? [  ;; list-of-shares
+    foreach row [ [s] ->  ;; list-of-shares
       create-contributions 1 [
         set hidden? true
-        set share ?
+        set share s
         set level item $j contribution-levels
         set my-subsystem new-subsystem
         ask new-subsystem [ set my-contributions lput myself my-contributions]
@@ -200,12 +200,12 @@ end
 to-report rd-distribution
   let rd-numbers n-values 5 [random 100]
   let total sum rd-numbers
-  set rd-numbers map [precision (? / total) 2] rd-numbers
+  set rd-numbers map [ [n] -> precision (n / total) 2 ] rd-numbers
   let offset 1 - sum rd-numbers
   let m ifelse-value (offset > 0) [min rd-numbers] [max rd-numbers]
   let p position m rd-numbers
   set rd-numbers replace-item p rd-numbers ((item p rd-numbers + offset))
-  report map [precision ? 2] rd-numbers
+  report map [ [n] -> precision n 2 ] rd-numbers
 end
 
 
@@ -217,12 +217,12 @@ to setup-variables
 end
 
 to my-setup-plots
-  set contribution-numbers (n-values num-contributions [? + 1])
-  set subsystems-numbers (n-values 5 [? + 1])
+  set contribution-numbers (range 1 (num-contributions + 1))
+  set subsystems-numbers (range 1 6)
   set subsystems-names ["Market" "Civil Liberties" "State" "Group" "Nature"]
   set subsystems-colors [blue grey red yellow green]
 
-  (foreach subsystems-names subsystems-colors [setup-plot ?1 ?2])
+  (foreach subsystems-names subsystems-colors [ [ss-n ss-c] -> setup-plot ss-n ss-c ])
 
   set-current-plot "System"
   set-plot-y-range 0 1
@@ -234,10 +234,10 @@ to my-setup-plots
 end
 
 to setup-system-plot
-   foreach (n-values 5 [?]) [
-    create-temporary-plot-pen (word item ? subsystems-names)
+   foreach (range 5) [ [n] ->
+    create-temporary-plot-pen (word item n subsystems-names)
     set-plot-pen-mode 2
-    set-plot-pen-color (item ? subsystems-colors)
+    set-plot-pen-color (item n subsystems-colors)
   ]
 end
 
@@ -245,10 +245,10 @@ to setup-plot [name colour]
   set-current-plot name
   set-plot-y-range 0 ifelse-value (data-to-plot = "share") [1][0.01]
 
-  foreach contribution-numbers [
-    create-temporary-plot-pen (word ?)
+  foreach contribution-numbers [ [n] ->
+    create-temporary-plot-pen (word n)
     set-plot-pen-mode 2
-    set-plot-pen-color colour - 3 * (? - 2)
+    set-plot-pen-color colour - 3 * (n - 2)
   ]
 end
 
@@ -264,9 +264,8 @@ to go
   ask subsystems [update-payoffs]
   ask subsystems [update-avg-contributions]
   ask contributions [update-contribution-share]
-  ;show map [[share] of ?] (first [my-contributions] of (subsystems with [id = i]))
+
   set system-avg-contribution sum [share * avg-contribution] of subsystems
-  ;show (word "X: " system-avg-contribution)
   ask subsystems [update-subsystem-share]
 
   set diversity-index 1 / sum [share ^ 2] of subsystems
@@ -281,16 +280,15 @@ end
 
 to update-payoffs
   ;; the subsystem updates the payoff of its contributions
-  let p map [[share] of ?] my-contributions
+  let p map [ [c] -> [share] of c ] my-contributions
   let p+1 lput 0 (but-first p)
   let p-1 fput 0 (but-last p)
   let ss-share share
-  (foreach my-contributions p+1 p-1 contribution-levels [
-    ask ?1 [set payoff (ss-share * (1 - phi) + phi * (?2 - ?3)) * ?4]
+  (foreach my-contributions p+1 p-1 contribution-levels [ [c plus minus c-l] ->
+    ask c [set payoff (ss-share * (1 - phi) + phi * (plus - minus)) * c-l]
   ])
 
-  set avg-payoff sum map [[share * payoff] of ?] my-contributions
-  ;if id = i [show map [[payoff] of ?] my-contributions show avg-payoff]
+  set avg-payoff sum map [ [c] -> [share * payoff] of c ] my-contributions
 end
 
 to update-contribution-share
@@ -302,8 +300,7 @@ to update-contribution-share
 end
 
 to update-avg-contributions
-  set avg-contribution sum map [[share * level] of ?] my-contributions
-  ;if id = i [show avg-contribution]
+  set avg-contribution sum map [ [c] -> [share * level] of c ] my-contributions
 end
 
 to update-subsystem-share
@@ -321,27 +318,27 @@ end
 to do-plots
 
   let i 0
-  foreach list-of-subsystems [
+  foreach list-of-subsystems [ [ss] ->
     set-current-plot (item i subsystems-names)
-    plot-all map [[(runresult data-to-plot)] of ?] ([my-contributions] of ?)
+    plot-all map [ [c] -> [(runresult data-to-plot)] of c ] ([my-contributions] of ss)
     set i (i + 1)
   ]
 
   set-current-plot "System"
-  let data map [[share] of ?] list-of-subsystems
-  foreach subsystems-numbers [
-    set-current-plot-pen (word item (? - 1) subsystems-names)
-    plotxy time (item (? - 1) data)
+  let data map [ [ss] -> [share] of ss ] list-of-subsystems
+  foreach subsystems-numbers [ [n] ->
+    set-current-plot-pen (word item (n - 1) subsystems-names)
+    plotxy time (item (n - 1) data)
   ]
 
   set-current-plot "Diversity index"
   plotxy time diversity-index
 
   set-current-plot "Avg contributions"
-  set data map [[avg-contribution] of ?] list-of-subsystems
-  foreach subsystems-numbers [
-    set-current-plot-pen (word item (? - 1) subsystems-names)
-    plotxy time (item (? - 1) data)
+  set data map [ [ss] -> [avg-contribution] of ss ] list-of-subsystems
+  foreach subsystems-numbers [ [n] ->
+    set-current-plot-pen (word item (n - 1) subsystems-names)
+    plotxy time (item (n - 1) data)
   ]
   set-current-plot-pen "total"
   plotxy time system-avg-contribution
@@ -349,9 +346,9 @@ to do-plots
 end
 
 to plot-all [$l]
-  foreach contribution-numbers [
-    set-current-plot-pen (word ?)
-    plotxy time (item (? - 1) $l)
+  foreach contribution-numbers [ [n] ->
+    set-current-plot-pen (word n)
+    plotxy time (item (n - 1) $l)
   ]
 end
 
@@ -361,12 +358,12 @@ end
 
 to check-conditions
   ;; subsystems-names ["Market" "Civil Liberties" "State" "Group" "Nature"]
-  let subs-shares map [[share] of ?] list-of-subsystems
+  let subs-shares map [ [ss] -> [share] of ss ] list-of-subsystems
   set market-sucess (first subs-shares > 0.999)
   if (market-sucess and condition-1-time < 0) [set condition-1-time time]
 
   set civil-market-survival ((first subs-shares > 0.05) and (item 1 subs-shares > 0.05))
-  set group-nature-state-failure reduce and (map [? < 0.05] (sublist subs-shares 2 5))
+  set group-nature-state-failure reduce and (map [ [z] -> z < 0.05 ] (sublist subs-shares 2 5))
 
   if (civil-market-survival and group-nature-state-failure and condition-2-time < 0) [set condition-2-time time]
 end
@@ -383,10 +380,10 @@ end
 GRAPHICS-WINDOW
 298
 61
-543
-257
-1
-1
+471
+235
+-1
+-1
 55.0
 1
 10
@@ -609,7 +606,7 @@ x
 x
 0
 10
-0
+0.0
 1
 1
 NIL
@@ -1089,9 +1086,8 @@ false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
-
 @#$#@#$#@
-NetLogo 5.3.1
+NetLogo 6.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -1107,7 +1103,6 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
-
 @#$#@#$#@
 0
 @#$#@#$#@
